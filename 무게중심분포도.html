@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>가중치 분포 분류기</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #F5F4F0;
+    color: #2C2C2A;
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  h1 {
+    font-size: 17px;
+    font-weight: 500;
+    margin-bottom: 20px;
+    color: #2C2C2A;
+  }
+  .card {
+    background: #fff;
+    border: 0.5px solid #D3D1C7;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-label {
+    font-size: 12px;
+    color: #888780;
+    margin-bottom: 10px;
+  }
+
+  /* 결과 */
+  .result-value {
+    font-size: 36px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    transition: color 0.3s;
+  }
+
+  /* 무게중심 바 */
+  .needle-track {
+    position: relative;
+    height: 28px;
+    background: #F5F4F0;
+    border: 0.5px solid #D3D1C7;
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .needle-bar {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 3px;
+    background: #3266AD;
+    border-radius: 2px;
+    transition: left 0.3s ease;
+  }
+  .axis-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #AAAAAA;
+  }
+
+  /* 지표 카드 3개 */
+  .metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .metric-card {
+    background: #F5F4F0;
+    border: 0.5px solid #D3D1C7;
+    border-radius: 8px;
+    padding: 10px;
+  }
+  .metric-card .m-label { font-size: 11px; color: #888780; margin-bottom: 4px; }
+  .metric-card .m-value { font-size: 15px; font-weight: 500; }
+
+  /* 슬라이더 */
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .slider-key { width: 20px; font-size: 13px; font-weight: 500; color: #888780; }
+  .slider-name { width: 58px; font-size: 11px; color: #AAAAAA; }
+  .slider-row input[type=range] { flex: 1; height: 4px; }
+  .slider-num { width: 32px; text-align: right; font-size: 13px; font-weight: 500; }
+
+  /* 분포 바 */
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .bar-key { width: 20px; font-size: 12px; font-weight: 500; color: #888780; }
+  .bar-name { width: 52px; font-size: 11px; color: #AAAAAA; }
+  .bar-outer {
+    flex: 1;
+    height: 14px;
+    background: #F0EFE9;
+    border: 0.5px solid #D3D1C7;
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .bar-inner { height: 100%; border-radius: 7px; transition: width 0.25s; }
+  .bar-num { width: 32px; text-align: right; font-size: 11px; color: #AAAAAA; }
+
+  /* 프리셋 */
+  .preset-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .preset-btn {
+    font-size: 12px;
+    padding: 5px 12px;
+    border: 0.5px solid #D3D1C7;
+    border-radius: 8px;
+    background: #fff;
+    color: #2C2C2A;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .preset-btn:hover { background: #F5F4F0; }
+
+  /* 범례 */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: #888780;
+  }
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<h1>가중치 분포 분류기</h1>
+
+<!-- 범례 -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#5DCAA5"></div>E 맨왼쪽</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7F77DD"></div>D 왼쪽</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#888780"></div>C 중앙</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#F0997B"></div>B 오른쪽</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#D85A30"></div>A 맨오른쪽</div>
+</div>
+
+<!-- 결과 + 무게중심 바 -->
+<div class="card">
+  <div class="card-label">분류 결과</div>
+  <div class="result-value" id="result-text">—</div>
+  <div class="card-label">무게중심 위치</div>
+  <div class="needle-track"><div id="needle" class="needle-bar" style="left:50%"></div></div>
+  <div class="axis-labels">
+    <span>← 왼쪽 E (-2)</span>
+    <span>중앙 C (0)</span>
+    <span>오른쪽 A (+2) →</span>
+  </div>
+</div>
+
+<!-- 지표 3개 -->
+<div class="metrics">
+  <div class="metric-card"><div class="m-label">무게중심 (x̄)</div><div class="m-value" id="m-center">—</div></div>
+  <div class="metric-card"><div class="m-label">분산 (σ²)</div><div class="m-value" id="m-var">—</div></div>
+  <div class="metric-card"><div class="m-label">우합 : 좌합</div><div class="m-value" id="m-lr">—</div></div>
+</div>
+
+<!-- 슬라이더 -->
+<div class="card">
+  <div class="card-label">가중치 입력</div>
+  <div id="sliders"></div>
+</div>
+
+<!-- 분포 바 -->
+<div class="card">
+  <div class="card-label">가중치 분포</div>
+  <div id="bars"></div>
+</div>
+
+<!-- 프리셋 -->
+<div class="card">
+  <div class="card-label">프리셋 예제</div>
+  <div class="preset-row" id="presets"></div>
+</div>
+
+<script>
+const KEYS   = ['A','B','C','D','E'];
+const POS    = { A:2, B:1, C:0, D:-1, E:-2 };
+const NAMES  = { A:'맨오른쪽', B:'오른쪽', C:'중앙', D:'왼쪽', E:'맨왼쪽' };
+const COLORS = { A:'#D85A30', B:'#F0997B', C:'#888780', D:'#7F77DD', E:'#5DCAA5' };
+
+const RESULT_COLORS = {
+  '오른쪽':    '#D85A30',
+  '오른쪽조금':'#F0997B',
+  '왼쪽':     '#5DCAA5',
+  '왼쪽조금': '#7F77DD',
+  '좌우교대': '#3266AD',
+  '분산':     '#888780',
+};
+
+const PRESETS = [
+  { label:'예제1 — 오른쪽',      A:40, B:20, C:0,  D:10, E:0  },
+  { label:'예제2 — 오른쪽조금',  A:20, B:40, C:0,  D:10, E:0  },
+  { label:'예제3 — 왼쪽',        A:10, B:0,  C:30, D:10, E:50 },
+  { label:'예제4 — 왼쪽조금',    A:10, B:0,  C:25, D:40, E:20 },
+  { label:'예제5 — 좌우교대',    A:40, B:20, C:0,  D:10, E:40 },
+  { label:'예제6 — 분산',        A:10, B:15, C:3,  D:25, E:30 },
+];
+
+let vals = { A:40, B:20, C:0, D:10, E:0 };
+
+function classify(v) {
+  const total = KEYS.reduce((s,k) => s + v[k], 0);
+  if (total === 0) return '—';
+
+  const center = KEYS.reduce((s,k) => s + v[k] * POS[k], 0) / total;
+  const variance = KEYS.reduce((s,k) => s + v[k] * Math.pow(POS[k] - center, 2), 0) / total;
+
+  const rightSum = v.A + v.B;
+  const leftSum  = v.D + v.E;
+  const lrTotal  = rightSum + leftSum;
+  const lrDiff   = Math.abs(rightSum - leftSum);
+  const lrBalance = lrTotal > 0 ? 1 - (lrDiff / lrTotal) : 0;
+
+  // 좌우교대: 좌우 균형 + 분산 크고 + 중앙 비어있음
+  if (lrBalance > 0.75 && variance > 0.8 && v.C / total < 0.25) return '좌우교대';
+
+  // 분산: 골고루 퍼져있음
+  const activeVals = KEYS.map(k => v[k]).filter(x => x > 0);
+  if (activeVals.length > 0) {
+    const maxVal = Math.max(...activeVals);
+    const minVal = Math.min(...activeVals);
+    const spreadRatio = maxVal / (minVal + 0.001);
+    if (variance < 1.2 && spreadRatio < 4) return '분산';
+  }
+
+  if (Math.abs(center) < 0.2) return '분산';
+
+  // 방향 분류 (center 양수 = A,B 쪽 = 오른쪽)
+  if (center > 0) {
+    return v.A >= v.B ? '오른쪽' : '오른쪽조금';
+  } else {
+    return v.E >= v.D ? '왼쪽' : '왼쪽조금';
+  }
+}
+
+function update() {
+  const total = KEYS.reduce((s,k) => s + vals[k], 0);
+  if (total === 0) return;
+
+  const center   = KEYS.reduce((s,k) => s + vals[k] * POS[k], 0) / total;
+  const variance = KEYS.reduce((s,k) => s + vals[k] * Math.pow(POS[k] - center, 2), 0) / total;
+  const right = vals.A + vals.B;
+  const left  = vals.D + vals.E;
+  const result = classify(vals);
+
+  document.getElementById('result-text').textContent = result;
+  document.getElementById('result-text').style.color = RESULT_COLORS[result] || '#2C2C2A';
+  document.getElementById('m-center').textContent = center.toFixed(3);
+  document.getElementById('m-var').textContent    = variance.toFixed(3);
+  document.getElementById('m-lr').textContent     = `${right} : ${left}`;
+
+  const pct = ((center + 2) / 4 * 100).toFixed(1);
+  document.getElementById('needle').style.left = Math.min(98, Math.max(2, pct)) + '%';
+
+  const maxV = Math.max(...KEYS.map(k => vals[k]), 1);
+  KEYS.forEach(k => {
+    const bar = document.getElementById('bar-' + k);
+    if (bar) bar.style.width = (vals[k] / maxV * 100).toFixed(1) + '%';
+    const num = document.getElementById('barnum-' + k);
+    if (num) num.textContent = vals[k];
+    const slnum = document.getElementById('slnum-' + k);
+    if (slnum) slnum.textContent = vals[k];
+  });
+}
+
+// 슬라이더 생성
+const slidersEl = document.getElementById('sliders');
+KEYS.forEach(k => {
+  const row = document.createElement('div');
+  row.className = 'slider-row';
+  row.innerHTML = `
+    <div class="slider-key">${k}</div>
+    <div class="slider-name">${NAMES[k]}</div>
+    <input type="range" min="0" max="100" step="1" value="${vals[k]}"
+           id="sl-${k}" style="accent-color:${COLORS[k]}">
+    <div class="slider-num" id="slnum-${k}">${vals[k]}</div>
+  `;
+  slidersEl.appendChild(row);
+  row.querySelector('input').addEventListener('input', e => {
+    vals[k] = parseInt(e.target.value);
+    update();
+  });
+});
+
+// 분포 바 생성
+const barsEl = document.getElementById('bars');
+KEYS.forEach(k => {
+  const row = document.createElement('div');
+  row.className = 'bar-row';
+  row.innerHTML = `
+    <div class="bar-key">${k}</div>
+    <div class="bar-name">${NAMES[k]}</div>
+    <div class="bar-outer">
+      <div class="bar-inner" id="bar-${k}" style="background:${COLORS[k]};width:${vals[k]}%"></div>
+    </div>
+    <div class="bar-num" id="barnum-${k}">${vals[k]}</div>
+  `;
+  barsEl.appendChild(row);
+});
+
+// 프리셋 버튼
+const presetsEl = document.getElementById('presets');
+PRESETS.forEach(p => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn';
+  btn.textContent = p.label;
+  btn.addEventListener('click', () => {
+    vals = { A: p.A, B: p.B, C: p.C, D: p.D, E: p.E };
+    KEYS.forEach(k => {
+      const sl = document.getElementById('sl-' + k);
+      if (sl) sl.value = vals[k];
+    });
+    update();
+  });
+  presetsEl.appendChild(btn);
+});
+
+update();
+</script>
+</body>
+</html>
